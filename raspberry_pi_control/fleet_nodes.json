@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "cars": [{
+    "id": "car1", "node_id": "rover01", "name": "树莓派 rover01（待确认底盘）",
+    "ssh_host": "rover01", "remote_port": 8765, "ip": "rover01",
+    "enabled": true, "start": {"x": 0, "y": 0, "th": 0},
+    "steps": [{"t": "F", "v": 0.3}], "speed": 0.18, "delay": 0
+  }]
+}

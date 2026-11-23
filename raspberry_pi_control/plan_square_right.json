@@ -1,0 +1,4 @@
+{
+  "_note": "1 m square, clockwise (right turns): forward 1 m, then 3x (right 90, forward 1 m). +x initial heading, +y left of car.",
+  "waypoints": [[0.0, 0.0], [1.0, 0.0], [1.0, -1.0], [0.0, -1.0], [0.0, 0.0]]
+}

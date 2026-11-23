@@ -1,0 +1,21 @@
+[Unit]
+Description=Rover local serial task executor
+After=network.target
+
+[Service]
+Type=simple
+User=rover
+Group=rover
+SupplementaryGroups=dialout
+WorkingDirectory=/home/rover/rover_control
+ExecStart=/home/rover/rover_control/.venv/bin/python /home/rover/rover_control/node_service.py --config /home/rover/rover_control/node_config.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=12
+KillMode=control-group
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

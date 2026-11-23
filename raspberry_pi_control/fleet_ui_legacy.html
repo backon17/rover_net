@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WAVE ROVER 多车轨迹</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f3f3f1; --surface: #fcfcfb; --surface-2: #f6f6f4; --line: #e4e3df; --line-2: #d4d3ce;
+    --text: #0b0b0b; --text-2: #52514e; --muted: #8a8984;
+    --grid: #ecebe7; --grid-major: #d9d8d3;
+    --c1: #2a78d6; --c2: #eb6834; --c3: #1baf7a; --c4: #eda100;
+    --c5: #8a5cd6; --c6: #d6458f; --c7: #1596b0; --c8: #7a6a45;
+    --ok: #1f7a43; --ok-bg: #e5f3ea; --warn: #9a5800; --warn-bg: #fcefd6;
+    --err: #b42318; --err-bg: #fbe8e6; --run: #0b0b0b; --run-bg: #e9e8e4;
+    --estop: #c62828; --accent: #0b0b0b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --bg: #121211; --surface: #1a1a19; --surface-2: #222220; --line: #2e2e2b; --line-2: #3a3a37;
+      --text: #ffffff; --text-2: #c3c2b7; --muted: #8f8e86;
+      --grid: #24241f; --grid-major: #34342f;
+      --c1: #3987e5; --c2: #d95926; --c3: #199e70; --c4: #c98500;
+      --c5: #9a72e8; --c6: #e05a9c; --c7: #22a9c4; --c8: #a8916a;
+      --ok: #6fcf97; --ok-bg: #1d3326; --warn: #f2b84b; --warn-bg: #3a2e14;
+      --err: #ff8a80; --err-bg: #3d1f1c; --run: #ffffff; --run-bg: #33332f;
+      --accent: #ffffff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif; }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  button:hover:not(:disabled) { background: var(--surface-2); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 600; }
+  button.primary:hover:not(:disabled) { opacity: .88; background: var(--accent); }
+  button.ghost { border-color: transparent; background: transparent; color: var(--text-2); padding: 4px 8px; }
+  button.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--text); }
+  input[type=number], input[type=text] { border: 1px solid var(--line-2); background: var(--surface); border-radius: 6px; padding: 4px 8px; width: 76px; }
+  input.bad { border-color: var(--err); background: var(--err-bg); }
+  select { border: 1px solid var(--line-2); background: var(--surface); border-radius: 6px; padding: 4px 6px; }
+  .muted { color: var(--muted); }
+  .sub { color: var(--text-2); }
+  kbd { font: 11px/1 ui-monospace, Consolas, monospace; border: 1px solid rgba(255,255,255,.5); border-radius: 4px; padding: 2px 4px; }
+
+  /* top bar */
+  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 10px 18px;
+         background: var(--surface); border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; font-size: 16px; letter-spacing: .2px; white-space: nowrap; }
+  .brand span { color: var(--muted); font-weight: 500; }
+  .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border: 1px solid var(--line);
+          border-radius: 999px; font-size: 13px; background: var(--surface-2); white-space: nowrap; }
+  .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; flex: none; }
+  .spacer { flex: 1; }
+  .estop { background: var(--estop); color: #fff; border: none; font-weight: 700; font-size: 15px; padding: 8px 18px; border-radius: 10px;
+           display: inline-flex; gap: 10px; align-items: center; box-shadow: 0 1px 0 rgba(0,0,0,.15); }
+  .estop:hover:not(:disabled) { background: #a61f1f; }
+  #scanmsg { font-size: 12px; color: var(--text-2); max-width: 420px; }
+
+  /* layout */
+  .grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(400px, 1fr); gap: 16px; padding: 16px 18px; align-items: start; }
+  @media (max-width: 1150px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; }
+  .card-h { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  .card-h h2 { margin: 0; font-size: 15px; font-weight: 650; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
+  .legend i { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 5px; }
+
+  /* live map */
+  .live { position: sticky; top: 64px; }
+  .mapwrap { position: relative; }
+  #map { display: block; width: 100%; height: min(62vh, 640px); touch-action: none; cursor: grab; }
+  #map.dragging { cursor: grabbing; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line-2); border-radius: 8px;
+         padding: 6px 9px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); display: none; white-space: nowrap; }
+  .maphint { padding: 6px 16px; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--line); }
+  .coord { position: absolute; right: 12px; bottom: 8px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; pointer-events: none; }
+  .runbar { border-top: 1px solid var(--line); padding: 12px 16px 14px; }
+  .prog { display: grid; grid-template-columns: 70px 92px minmax(0,1fr) 160px 60px; gap: 10px; align-items: center; padding: 5px 0; font-size: 13px; }
+  .prog .name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+  .prog .what { color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .bar { height: 6px; border-radius: 3px; background: var(--grid); overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 3px; transition: width .25s linear; }
+  .prog .t { text-align: right; font-variant-numeric: tabular-nums; color: var(--text-2); }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--run-bg); color: var(--text-2); white-space: nowrap; width: fit-content; }
+  .chip.ok { background: var(--ok-bg); color: var(--ok); }
+  .chip.warn { background: var(--warn-bg); color: var(--warn); }
+  .chip.err { background: var(--err-bg); color: var(--err); }
+  .chip.run { background: var(--run-bg); color: var(--run); font-weight: 600; }
+  .chip.run::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .25; } }
+  .launch { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+  .launch .primary { padding: 8px 16px; }
+  .launch label { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 13px; cursor: pointer; }
+  #runmsg { font-weight: 600; }
+  #warn { margin-top: 8px; font-size: 12.5px; color: var(--text-2); }
+  #warn .bad { color: var(--err); font-weight: 600; }
+  .choreo { margin-top: 12px; border-top: 1px solid var(--line); }
+  .choreo details { margin-top: 8px; font-size: 13px; color: var(--text-2); }
+  .choreo summary { cursor: pointer; }
+  .choreo ul { margin: 6px 0 4px; padding-left: 24px; }
+  #choreo-msg { font-size: 13px; }
+
+  /* editor */
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 12px 0; border-bottom: 1px solid var(--line); }
+  .tab.off { opacity: .45; }
+  .fleetbar { padding: 12px 16px 12px; border-bottom: 1px solid var(--line); background: var(--surface-2); border-radius: 14px 14px 0 0; }
+  .fleetbar .fb-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+  .fleetbar .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+  .fleetbar input[type=number] { width: 64px; }
+  .fleetbar .ok { color: var(--ok); }
+  .tab { border: 1px solid transparent; border-bottom: none; border-radius: 10px 10px 0 0; background: transparent; padding: 8px 14px 9px;
+         display: inline-flex; gap: 8px; align-items: center; font-weight: 600; color: var(--text-2); position: relative; top: 1px; }
+  .tab.on { background: var(--surface); border-color: var(--line); color: var(--text); }
+  .tab .chip { font-weight: 500; }
+  .sec { padding: 14px 16px; border-bottom: 1px solid var(--line); }
+  .sec:last-child { border-bottom: none; }
+  .sec-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+  .sec-h b { font-size: 14px; }
+  .sec-h .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: var(--text); color: var(--surface); font-size: 12px; font-weight: 700; }
+  .sec-h .muted { font-size: 12px; }
+  .tpls { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tpl { border-radius: 999px; padding: 5px 12px; }
+  .tpl.on { background: var(--text); color: var(--surface); border-color: var(--text); }
+  .tplp { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); }
+  .tplp label { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); font-size: 13px; }
+  .seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; overflow: hidden; }
+  .seg button { border: none; border-radius: 0; padding: 4px 10px; background: var(--surface); }
+  .seg button + button { border-left: 1px solid var(--line-2); }
+  .seg button.on { background: var(--text); color: var(--surface); }
+  .steps { list-style: none; margin: 0; padding: 0; counter-reset: s; max-height: 300px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+  .steps li { display: grid; grid-template-columns: 22px 18px 92px 84px 1fr auto; gap: 8px; align-items: center; padding: 6px 8px 6px 10px; border-bottom: 1px solid var(--line); }
+  .steps li:last-child { border-bottom: none; }
+  .steps li.cur { background: var(--run-bg); }
+  .steps li.done { opacity: .55; }
+  .steps .idx { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+  .steps .icon { font-size: 15px; color: var(--text-2); text-align: center; }
+  .steps .acts { display: flex; gap: 2px; justify-self: end; }
+  .steps .acts button { padding: 2px 6px; }
+  .steps .empty { display: block; padding: 18px; text-align: center; color: var(--muted); }
+  .addrow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .addrow button { font-size: 13px; padding: 4px 10px; }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .row label { display: inline-flex; gap: 6px; align-items: center; color: var(--text-2); }
+  .switch { display: inline-flex; gap: 8px; align-items: center; cursor: pointer; color: var(--text-2); }
+  .actions { display: flex; gap: 8px; }
+  details.log summary { cursor: pointer; color: var(--text-2); font-size: 13px; }
+  details.log pre { margin: 8px 0 0; max-height: 220px; overflow: auto; font: 11.5px/1.45 ui-monospace, Consolas, monospace;
+                    background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 8px; white-space: pre-wrap; }
+  .connline { font-size: 12.5px; color: var(--text-2); margin-top: 6px; }
+  .connline .err { color: var(--err); }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">WAVE ROVER <span>多车轨迹</span></div>
+  <div class="pills" id="pills"></div>
+  <button id="scan" class="ghost" title="IP 变了、车连不上时点这里">扫描小车</button>
+  <span id="scanmsg"></span>
+  <span class="spacer"></span>
+  <button class="estop" id="estop">■ 全部急停 <kbd>空格</kbd></button>
+</header>
+
+<main class="grid">
+  <section class="card live">
+    <div class="card-h">
+      <h2>场地实况</h2>
+      <div class="legend">
+        <span><i style="border-top:2px dashed var(--muted)"></i>计划路线</span>
+        <span><i style="border-top:4px solid var(--muted)"></i>已走（估计）</span>
+      </div>
+      <span class="spacer"></span>
+      <button class="ghost" id="fit">适配视图</button>
+    </div>
+    <div class="mapwrap">
+      <canvas id="map"></canvas>
+      <div class="tip" id="tip"></div>
+      <div class="coord" id="coord"></div>
+    </div>
+    <div class="maphint" id="maphint">拖动虚线框移动起点，拖动框前面的小圆点转朝向（按住 Shift 不吸附）· 滚轮缩放 · 拖空白处平移 · 细网格 0.5 m</div>
+    <div class="runbar">
+      <div id="progress"></div>
+      <div class="launch">
+        <button class="primary" id="go-sync">▶ 同时出发</button>
+        <button class="primary" id="go-delay">▶ 按各车延时错开出发</button>
+        <button id="preview">预演</button>
+        <label title="每一步（转弯、直行）都等所有车做完再一起开始下一步，转弯快慢不一也不会错位"><input type="checkbox" id="sync-steps"> 每一步对齐</label>
+        <span id="runmsg"></span>
+      </div>
+      <div id="warn"></div>
+      <div class="choreo">
+        <div class="launch">
+          <button id="choreo-import">导入编排 JSON</button>
+          <input type="file" id="choreo-file" accept=".json,application/json" hidden>
+          <button id="choreo-preview" disabled>预览编排运动</button>
+          <button class="primary" id="choreo-start" disabled>▶ 执行编排</button>
+          <button class="ghost" id="choreo-close" hidden>关闭编排</button>
+          <span id="choreo-msg" role="status"></span>
+        </div>
+        <div id="choreo-plan"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card editor">
+    <div class="fleetbar" id="fleetbar"></div>
+    <div class="tabs" id="tabs"></div>
+    <div id="editor"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+// ------------------------------------------------------------------ setup --
+const CAR_L = 0.21, CAR_W = 0.17;          // Wave Rover footprint (m)
+const SAFE_GAP = 0.35;                      // centre distance treated as "may collide"
+const RAMP = 0.3, RAMP0 = 0.8;              // must match fw_ramp / fw_ramp0
+// lock-step slots, must match SLOT_* in fleet_ui.py
+const SLOT_F_PAD = 0.6, SLOT_T_BASE = 1.35, SLOT_T_PER_DEG = 0.015;
+let syncSteps = localStorage.getItem("wr_sync") !== "0";
+const deg = Math.PI / 180;
+const $ = (id) => document.getElementById(id);
+const r2 = (v) => Math.round(v * 100) / 100;
+const wrap = (a) => ((a + 180) % 360 + 360) % 360 - 180;
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const carColor = (i) => css(`--c${(i % 8) + 1}`);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let cfg = { cars: [] };
+let live = null;
+let plans = [];
+let sel = 0;
+let view = { cx: 0.8, cy: 0, scale: 150 };
+let preview = null;
+let choreography = null;
+let choreoPreviewAt = null;
+let choreoPending = false;
+let choreoMessage = "";
+let tplSel = { name: "正方形", p: {} };
+
+// ------------------------------------------------------------- templates --
+const TEMPLATES = {
+  "直线":   { params: { a: ["长度", 1.0, "m"] }, make: (p) => [F(p.a)] },
+  "L 形":   { params: { a: ["第一段", 1.0, "m"], b: ["第二段", 0.5, "m"] }, dir: true,
+              make: (p, d) => [F(p.a), T(90 * d), F(p.b)] },
+  "正方形": { params: { a: ["边长", 1.0, "m"], n: ["圈数", 1, "圈"] }, dir: true,
+              make: (p, d) => rep(Math.max(1, Math.round(p.n)), () => [F(p.a), T(90 * d), F(p.a), T(90 * d), F(p.a), T(90 * d), F(p.a), T(90 * d)]) },
+  "矩形":   { params: { a: ["长", 1.5, "m"], b: ["宽", 0.8, "m"] }, dir: true,
+              make: (p, d) => [F(p.a), T(90 * d), F(p.b), T(90 * d), F(p.a), T(90 * d), F(p.b), T(90 * d)] },
+  "往返":   { params: { a: ["距离", 1.0, "m"], n: ["来回次数", 1, "次"] }, dir: true,
+              make: (p, d) => rep(Math.max(1, Math.round(p.n)), () => [F(p.a), T(180 * d), F(p.a), T(180 * d)]) },
+  "Z 字":   { params: { a: ["横段", 0.6, "m"], b: ["斜移", 0.5, "m"] }, dir: true,
+              make: (p, d) => [F(p.a), T(90 * d), F(p.b), T(-90 * d), F(p.a)] },
+};
+function F(v) { return { t: "F", v: Number(v) }; }
+function T(v) { return { t: "T", v: Number(v) }; }
+function rep(n, f) { let o = []; for (let i = 0; i < n; i++) o = o.concat(f()); return o; }
+
+function pointsToSteps(points) {
+  const out = [];
+  let cur = [0, 0], hd = 0;
+  for (const p of points) {
+    const dx = p[0] - cur[0], dy = p[1] - cur[1], d = Math.hypot(dx, dy);
+    if (d < 0.02) continue;
+    const b = Math.atan2(dy, dx) / deg, turn = wrap(b - hd);
+    if (Math.abs(turn) >= 0.5) out.push(T(Math.round(turn * 10) / 10));
+    out.push(F(r2(d)));
+    cur = p; hd = b;
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- frames --
+function l2w(start, p) {
+  const t = start.th * deg, c = Math.cos(t), s = Math.sin(t);
+  return [start.x + c * p[0] - s * p[1], start.y + s * p[0] + c * p[1]];
+}
+// local nodes after each step: [{x, y, h}]
+function nodes(steps) {
+  let x = 0, y = 0, h = 0;
+  const out = [{ x, y, h }];
+  for (const s of steps) {
+    if (s.t === "T") h += s.v;
+    else { x += s.v * Math.cos(h * deg); y += s.v * Math.sin(h * deg); }
+    out.push({ x, y, h });
+  }
+  return out;
+}
+function stepText(s) {
+  if (s.t === "F") return (s.v >= 0 ? "前进 " : "后退 ") + Math.abs(s.v).toFixed(2) + " m";
+  return (s.v >= 0 ? "左转 " : "右转 ") + Math.abs(s.v).toFixed(0) + "°";
+}
+// estimated timeline (local frame): keyframes {t, x, y, h}
+// With lock-step every step occupies its fixed slot (the car moves, then
+// waits for the others); without it the steps run back to back.
+function timeline(car, delay, align = syncSteps) {
+  const v = car.speed >= 0.08 ? car.speed : 0.09;
+  let x = 0, y = 0, h = 0, t = delay;
+  const kf = [{ t: 0, x, y, h }, { t, x, y, h }];
+  for (const s of car.steps) {
+    const t0 = t;
+    let slot;
+    if (s.t === "T") {
+      slot = SLOT_T_BASE + SLOT_T_PER_DEG * Math.abs(s.v);
+      if (Math.abs(s.v) >= 1) t += 0.4 + Math.abs(s.v) * 0.0115;
+      if (Math.abs(s.v) >= 0.5) { h += s.v; kf.push({ t, x, y, h }); }
+    } else {
+      const dur = Math.abs(s.v) / v + RAMP * (1 - RAMP0) / 2;
+      slot = dur + SLOT_F_PAD;
+      t += dur;
+      x += s.v * Math.cos(h * deg); y += s.v * Math.sin(h * deg);
+      kf.push({ t, x, y, h });
+    }
+    t = align ? t0 + slot : t + 0.2;
+    kf.push({ t, x, y, h });
+  }
+  return kf;
+}
+function poseAt(kf, t) {
+  if (t <= kf[0].t) return kf[0];
+  for (let i = 1; i < kf.length; i++) if (t <= kf[i].t) {
+    const a = kf[i - 1], b = kf[i], k = (t - a.t) / Math.max(1e-6, b.t - a.t);
+    return { x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k, h: a.h + (b.h - a.h) * k };
+  }
+  return kf[kf.length - 1];
+}
+function worldPose(car, lp) { const p = l2w(car.start, [lp.x, lp.y]); return { x: p[0], y: p[1], h: car.start.th + lp.h }; }
+function planCheck(useDelay) {
+  const cars = cfg.cars.filter((c) => c.enabled && c.steps.length);
+  const kfs = cars.map((c) => timeline(c, useDelay ? c.delay : 0));
+  const end = Math.max(0, ...kfs.map((k) => k[k.length - 1].t));
+  let worst = { d: Infinity, t: 0, a: null, b: null };
+  for (let t = 0; t <= end + 1e-9; t += 0.1) {
+    const ps = cars.map((c, i) => worldPose(c, poseAt(kfs[i], t)));
+    for (let i = 0; i < ps.length; i++) for (let j = i + 1; j < ps.length; j++) {
+      const d = Math.hypot(ps[i].x - ps[j].x, ps[i].y - ps[j].y);
+      if (d < worst.d) worst = { d, t, a: cars[i], b: cars[j] };
+    }
+  }
+  return { cars, kfs, end, worst };
+}
+
+// ------------------------------------------------------------------- API --
+async function api(path, body) {
+  const opt = body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  return (await fetch(path, opt)).json();
+}
+let saveTimer = null;
+function changed() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => api("/api/config", { cars: cfg.cars }).catch(() => {}), 400);
+  refreshWarn();
+}
+function liveOf(car) { return live && live.cars.find((x) => x.id === car.id); }
+
+// ------------------------------------------------------------------ status --
+function chipOf(c) {
+  if (!c) return ["服务未响应", "err"];
+  if (!c.connected) return ["离线", "err"];
+  const cls = { idle: "", done: "ok", calib: "warn", ready: "warn", waiting: "warn", sync: "warn", turn: "run", straight: "run", stopped: "warn", error: "err" }[c.phase] ?? "";
+  return [c.phase_text, cls];
+}
+function renderTop() {
+  $("pills").innerHTML = cfg.cars.map((car, i) => {
+    const c = liveOf(car); const [txt, cls] = chipOf(c);
+    const bat = c && c.connected && c.bat != null ? `${Number(c.bat).toFixed(1)} V` : "";
+    const low = c && c.bat != null && c.bat > 5 && c.bat < 10.8;
+    return `<span class="pill"><span class="sw" style="background:${carColor(i)}"></span>${esc(car.name)}
+      <span class="chip ${cls}">${esc(txt)}</span>${bat ? `<span class="${low ? "err" : "muted"}" style="${low ? "color:var(--err)" : ""}">${bat}</span>` : ""}</span>`;
+  }).join("");
+}
+function progressOf(car, c) {
+  const n = car.steps.length;
+  if (!c || !c.run) return { frac: 0, what: n ? `${n} 步 · 约 ${timeline(car, 0).slice(-1)[0].t.toFixed(0)} 秒` : "还没有设置轨迹", t: "" };
+  const r = c.run, k = r.step;
+  let frac = 0, what = "";
+  if (c.phase === "calib" || c.phase === "ready") what = "测陀螺零偏中，别碰车";
+  else if (c.phase === "waiting") what = `等待出发 ${r.t_dep != null ? Math.max(0, r.t_dep).toFixed(1) + " s" : ""}`;
+  else if (k != null && k < r.nstep) {
+    const s = r.steps[k];
+    let f = 0;
+    if (s.t === "F" && r.est) {
+      const nd = nodes(r.steps), a = nd[k], b = nd[k + 1], L = Math.hypot(b.x - a.x, b.y - a.y);
+      f = L > 1e-6 ? Math.min(1, Math.hypot(r.est[0] - a.x, r.est[1] - a.y) / L) : 1;
+    }
+    frac = (k + f) / r.nstep;
+    what = `第 ${k + 1}/${r.nstep} 步 · ${stepText(s)}`;
+  } else if (k != null) { frac = 1; what = `全部 ${r.nstep} 步完成`; }
+  if (c.phase === "error") what = "出错：" + (c.error || "");
+  if (c.phase === "stopped") what = "已停止" + (k != null && k < r.nstep ? `（停在第 ${k + 1} 步）` : "");
+  if (c.phase === "done") frac = 1;
+  return { frac, what, t: r.elapsed != null ? `${r.elapsed.toFixed(1)} s` : "" };
+}
+function renderProgress() {
+  $("progress").innerHTML = cfg.cars.map((car, i) => {
+    const c = liveOf(car); const [txt, cls] = chipOf(c); const p = progressOf(car, c);
+    return `<div class="prog"><span class="name"><span class="sw" style="background:${carColor(i)}"></span>${esc(car.name)}</span>
+      <span class="chip ${cls}">${esc(txt)}</span><span class="what" title="${esc(p.what)}">${esc(p.what)}</span>
+      <div class="bar"><div style="width:${(p.frac * 100).toFixed(1)}%;background:${carColor(i)}"></div></div><span class="t">${p.t}</span></div>`;
+  }).join("");
+  const running = live && live.running;
+  $("go-sync").disabled = $("go-delay").disabled = !!running || !live || !!choreography || choreoPending;
+  $("preview").disabled = !!choreography || choreoPending;
+  const nGo = cfg.cars.filter((c) => c.enabled && c.steps.length && isOnline(c)).length;
+  $("go-sync").textContent = `▶ 同时出发（${nGo} 辆）`;
+  $("go-delay").textContent = `▶ 按各车延时错开出发（${nGo} 辆）`;
+  updateFleetSum();
+  let msg = "";
+  if (!live) msg = '<span style="color:var(--err)">控制程序没响应（fleet_ui 的黑色窗口还开着吗？）</span>';
+  else if (running) {
+    const ph = live.cars.filter((c) => c.running).map((c) => c.phase);
+    msg = ph.includes("calib") || ph.includes("ready") ? "正在测零偏，别碰车…"
+      : live.go_in != null && live.go_in > 0 ? `${live.go_in.toFixed(1)} 秒后出发` : "运行中";
+  }
+  $("runmsg").innerHTML = msg;
+}
+async function poll() {
+  try { live = await api("/api/state"); } catch (_) { live = null; }
+  renderTop(); renderProgress(); renderTabs(); renderEditorLive(); renderChoreographyStatus();
+}
+
+// --------------------------------------------------------------- fleet bar --
+function renderFleetbar() {
+  const car = cfg.cars[sel];
+  $("fleetbar").innerHTML = `
+    <div class="fb-h"><b>整队设置</b><span class="muted" id="fbsum"></span></div>
+    <div class="row"><span class="muted">参加出发：</span>
+      <button id="fb-all">全选</button><button id="fb-online">只选在线的</button><button id="fb-none">全不选</button></div>
+    <div class="row"><button id="fb-copy">把 ${esc(car ? car.name : "")} 的步骤和速度复制给所有参加的车</button><span id="fb-msg" class="ok"></span></div>
+    <div class="row"><span class="muted">起点并排：</span><label>车间距 <input type="number" id="fb-gap" step="0.05" min="0.25" value="${localStorage.getItem("wr_gap") || 0.4}"> m</label>
+      <button id="fb-line" title="参加的车按车号从上到下排成一排，车头都朝右（→），和地上摆法一致">按车号从上到下排成一排</button></div>`;
+  const setAll = (f) => { cfg.cars.forEach((c) => (c.enabled = f(c))); changed(); renderTabs(); renderEditor(); updateFleetSum(); };
+  $("fb-all").onclick = () => setAll(() => true);
+  $("fb-none").onclick = () => setAll(() => false);
+  $("fb-online").onclick = () => setAll((c) => isOnline(c));
+  $("fb-copy").onclick = () => {
+    const src = cfg.cars[sel];
+    const targets = cfg.cars.filter((c) => c.enabled && c !== src);
+    if (!src.steps.length) { $("fb-msg").textContent = ""; alert(`${src.name} 还没有步骤`); return; }
+    targets.forEach((o) => { o.steps = src.steps.map((s) => ({ ...s })); o.speed = src.speed; });
+    changed(); renderTabs(); fitView();
+    $("fb-msg").textContent = targets.length ? `已复制给 ${targets.length} 辆 ✓` : "没有其他参加的车";
+  };
+  $("fb-line").onclick = () => {
+    const g = Number($("fb-gap").value);
+    if (!(g >= 0.2)) { alert("间距至少 0.2 m"); return; }
+    localStorage.setItem("wr_gap", String(g));
+    cfg.cars.filter((c) => c.enabled).forEach((c, k) => { c.start = { x: 0, y: r2(-k * g), th: 0 }; });
+    changed(); fitView(); renderEditor();
+  };
+  updateFleetSum();
+}
+function updateFleetSum() {
+  if (!$("fbsum")) return;
+  const en = cfg.cars.filter((c) => c.enabled), on = cfg.cars.filter((c) => isOnline(c));
+  const offEn = en.filter((c) => !isOnline(c)).map((c) => c.name);
+  $("fbsum").innerHTML = `参加 ${en.length}/${cfg.cars.length} 辆 · 在线 ${on.length} 辆` +
+    (offEn.length ? ` · <span style="color:var(--err)">${esc(offEn.join("、"))} 勾选了但不在线：它不会动，若还在场地上会被撞，出发前请开机或拿走</span>` : "");
+}
+
+// ------------------------------------------------------------------ editor --
+function renderTabs() {
+  $("tabs").innerHTML = cfg.cars.map((car, i) => {
+    const [txt, cls] = chipOf(liveOf(car));
+    return `<button class="tab ${i === sel ? "on" : ""} ${car.enabled ? "" : "off"}" data-i="${i}" title="${car.enabled ? "" : "没勾选参加出发"}"><span class="sw" style="background:${carColor(i)}"></span>${esc(car.name)}
+      <span class="chip ${cls}">${esc(txt)}</span></button>`;
+  }).join("");
+  $("tabs").querySelectorAll(".tab").forEach((b) => b.onclick = () => { sel = Number(b.dataset.i); renderTabs(); renderEditor(); renderFleetbar(); });
+}
+function numInput(id, val, step, onv, width) {
+  return `<input type="number" id="${id}" value="${val}" step="${step}" style="${width ? `width:${width}px` : ""}" data-on="${onv}">`;
+}
+function renderEditor() {
+  const car = cfg.cars[sel];
+  if (!car) return;
+  const tpl = TEMPLATES[tplSel.name];
+  const others = cfg.cars.filter((c) => c !== car);
+  const dirBtn = tpl && tpl.dir ? `<label>方向 <span class="seg"><button data-dir="-1" class="${(tplSel.dir ?? -1) === -1 ? "on" : ""}">右转</button><button data-dir="1" class="${tplSel.dir === 1 ? "on" : ""}">左转</button></span></label>` : "";
+  const params = tpl ? Object.entries(tpl.params).map(([k, [label, def, unit]]) =>
+    `<label>${label} <input type="number" step="${unit === "m" ? 0.1 : 1}" min="0" data-p="${k}" value="${tplSel.p[k] ?? def}"> ${unit}</label>`).join("") : "";
+  const fileOpts = plans.map((p) => `<option value="${esc(p.name)}">${esc(p.name)}</option>`).join("");
+  $("editor").innerHTML = `
+    <div class="sec">
+      <div class="sec-h"><span class="n">1</span><b>选个模板</b><span class="muted">一键生成步骤，生成后还能在下面逐条改</span></div>
+      <div class="tpls">${Object.keys(TEMPLATES).map((n) => `<button class="tpl ${n === tplSel.name ? "on" : ""}" data-tpl="${n}">${n}</button>`).join("")}
+        ${plans.length ? `<select id="planfile"><option value="">从文件导入…</option>${fileOpts}</select>` : ""}</div>
+      <div class="tplp">${params}${dirBtn}<span class="spacer"></span><button class="primary" id="tplgo">生成 → ${esc(car.name)}</button></div>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><span class="n">2</span><b>步骤</b><span class="muted" id="stepsum"></span><span class="spacer"></span>
+        <button class="ghost" id="clr">清空</button></div>
+      <ol class="steps" id="steps"></ol>
+      <div class="addrow">
+        <button data-add="F,0.5">＋ 前进 0.5 m</button><button data-add="F,1">＋ 前进 1 m</button>
+        <button data-add="T,90">＋ 左转 90°</button><button data-add="T,-90">＋ 右转 90°</button><button data-add="T,180">＋ 掉头</button>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><span class="n">3</span><b>速度与出发</b></div>
+      <div class="row">
+        <label>速度 <span class="seg" id="spdseg">${[["慢", 0.18], ["中", 0.25], ["快", 0.3]].map(([n, v]) => `<button data-spd="${v}" class="${Math.abs(car.speed - v) < 1e-6 ? "on" : ""}">${n}</button>`).join("")}</span>
+          ${numInput("spd", car.speed, 0.01, "speed")} m/s</label>
+        <label>出发延时 ${numInput("dly", car.delay, 0.5, "delay", 64)} 秒</label>
+        <label class="switch"><input type="checkbox" id="en" ${car.enabled ? "checked" : ""}> 参加"一起出发"</label>
+      </div>
+    </div>
+    <div class="sec">
+      <div class="sec-h"><span class="n">4</span><b>起点摆放</b><span class="muted">和车在地上的位置、车头方向一致；也可以在左边地图上拖</span></div>
+      <div class="row">
+        <label>x ${numInput("sx", r2(car.start.x), 0.1, "x", 66)} m</label>
+        <label>y ${numInput("sy", r2(car.start.y), 0.1, "y", 66)} m</label>
+        <label>车头朝 <span class="seg" id="thseg">${[["→", 0], ["↑", 90], ["←", 180], ["↓", -90]].map(([n, v]) => `<button data-th="${v}" class="${Math.abs(wrap(car.start.th - v)) < 0.5 ? "on" : ""}">${n}</button>`).join("")}</span>
+          ${numInput("sth", Math.round(car.start.th), 15, "th", 60)}°</label>
+      </div>
+      ${others.length ? `<div class="row" style="margin-top:10px"><select id="copyto"><option value="">把这套步骤和速度复制给…</option><option value="*">所有参加出发的车</option>${others.map((o) => `<option value="${o.id}">${esc(o.name)}</option>`).join("")}</select><span id="copymsg" class="muted"></span></div>` : ""}
+    </div>
+    <div class="sec">
+      <div class="actions"><button class="primary" id="solo">▶ 只跑 ${esc(car.name)}</button><button id="stop1">■ 停 ${esc(car.name)}</button>
+        <span class="spacer"></span><label class="sub" style="font-size:13px">IP <input type="text" id="ip" value="${esc(car.ip)}" style="width:128px"></label></div>
+      <div class="connline" id="connline"></div>
+      <details class="log" id="logbox"><summary>运行日志</summary><pre id="log"></pre></details>
+    </div>`;
+  // template bindings
+  $("editor").querySelectorAll("[data-tpl]").forEach((b) => b.onclick = () => { tplSel = { name: b.dataset.tpl, p: {}, dir: tplSel.dir }; renderEditor(); });
+  $("editor").querySelectorAll("[data-p]").forEach((inp) => inp.oninput = () => { tplSel.p[inp.dataset.p] = Number(inp.value); });
+  $("editor").querySelectorAll("[data-dir]").forEach((b) => b.onclick = () => { tplSel.dir = Number(b.dataset.dir); renderEditor(); });
+  $("tplgo").onclick = () => {
+    const t = TEMPLATES[tplSel.name], p = {};
+    for (const [k, [, def]] of Object.entries(t.params)) p[k] = Number(tplSel.p[k] ?? def);
+    if (Object.values(p).some((v) => !(v > 0))) { alert("参数要大于 0"); return; }
+    car.steps = t.make(p, tplSel.dir ?? -1);
+    renderSteps(); changed();
+  };
+  if ($("planfile")) $("planfile").onchange = (e) => {
+    const p = plans.find((x) => x.name === e.target.value);
+    if (p) { car.steps = pointsToSteps(p.points); renderSteps(); changed(); }
+    e.target.value = "";
+  };
+  $("clr").onclick = () => { if (!car.steps.length || confirm(`清空 ${car.name} 的全部步骤？`)) { car.steps = []; renderSteps(); changed(); } };
+  $("editor").querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
+    const [t, v] = b.dataset.add.split(","); car.steps.push({ t, v: Number(v) }); renderSteps(); changed();
+    const ol = $("steps"); ol.scrollTop = ol.scrollHeight;
+  });
+  // numbers
+  const bindNum = (id, set, after) => {
+    $(id).oninput = (e) => {
+      const v = Number(e.target.value), ok = e.target.value.trim() !== "" && isFinite(v);
+      e.target.classList.toggle("bad", !ok);
+      if (ok) { set(v); after && after(); changed(); }
+    };
+  };
+  bindNum("spd", (v) => (car.speed = v), () => $("spdseg").querySelectorAll("button").forEach((b) => b.classList.toggle("on", Math.abs(Number(b.dataset.spd) - car.speed) < 1e-6)));
+  bindNum("dly", (v) => (car.delay = v));
+  bindNum("sx", (v) => (car.start.x = v));
+  bindNum("sy", (v) => (car.start.y = v));
+  bindNum("sth", (v) => (car.start.th = v), () => $("thseg").querySelectorAll("button").forEach((b) => b.classList.toggle("on", Math.abs(wrap(car.start.th - Number(b.dataset.th))) < 0.5)));
+  $("spdseg").querySelectorAll("button").forEach((b) => b.onclick = () => { car.speed = Number(b.dataset.spd); changed(); renderEditor(); });
+  $("thseg").querySelectorAll("button").forEach((b) => b.onclick = () => { car.start.th = Number(b.dataset.th); changed(); renderEditor(); });
+  $("en").onchange = (e) => { car.enabled = e.target.checked; changed(); renderTabs(); updateFleetSum(); };
+  if ($("copyto")) $("copyto").onchange = (e) => {
+    const v = e.target.value;
+    const targets = v === "*" ? cfg.cars.filter((c) => c.enabled && c !== car) : cfg.cars.filter((c) => c.id === v);
+    targets.forEach((o) => { o.steps = car.steps.map((s) => ({ ...s })); o.speed = car.speed; });
+    if (targets.length) { changed(); renderTabs(); }
+    $("copymsg").textContent = targets.length ? `已复制给 ${targets.map((o) => o.name).join("、")} ✓` : "";
+    e.target.value = "";
+  };
+  $("solo").onclick = () => launch([car], false);
+  $("stop1").onclick = () => api("/api/stop", { ids: [car.id] });
+  $("ip").onchange = async (e) => {
+    car.ip = e.target.value.trim(); changed();
+    const r = await api("/api/car", { id: car.id, ip: car.ip }); if (r.error) alert(r.error);
+  };
+  renderSteps(); renderEditorLive();
+}
+function renderSteps() {
+  const car = cfg.cars[sel];
+  const ol = $("steps");
+  if (!ol) return;
+  if (!car.steps.length) { ol.innerHTML = `<li class="empty" style="display:block">还没有步骤：先选模板点"生成"，或用下面的按钮一步步加</li>`; }
+  else ol.innerHTML = car.steps.map((s, k) => {
+    const kind = s.t === "F" ? (s.v >= 0 ? "fwd" : "back") : (s.v >= 0 ? "left" : "right");
+    const icon = { fwd: "↑", back: "↓", left: "↺", right: "↻" }[kind];
+    return `<li data-k="${k}"><span class="idx">${k + 1}</span><span class="icon">${icon}</span>
+      <select data-kind="${k}">${[["fwd", "前进"], ["back", "后退"], ["left", "左转"], ["right", "右转"]].map(([v, n]) => `<option value="${v}" ${v === kind ? "selected" : ""}>${n}</option>`).join("")}</select>
+      <span><input type="number" data-val="${k}" value="${s.t === "F" ? r2(Math.abs(s.v)) : Math.abs(s.v)}" step="${s.t === "F" ? 0.1 : 15}" min="0" style="width:72px"></span>
+      <span class="muted">${s.t === "F" ? "m" : "°"}</span>
+      <span class="acts"><button class="ghost" data-up="${k}" title="上移">↑</button><button class="ghost" data-dn="${k}" title="下移">↓</button><button class="ghost" data-del="${k}" title="删除">✕</button></span></li>`;
+  }).join("");
+  const sum = car.steps.length ? `共 ${car.steps.length} 步 · 约 ${timeline(car, 0).slice(-1)[0].t.toFixed(0)} 秒` : "";
+  $("stepsum").textContent = sum;
+  const apply = (k, kind, mag) => {
+    const sgn = kind === "back" || kind === "right" ? -1 : 1;
+    car.steps[k] = { t: kind === "fwd" || kind === "back" ? "F" : "T", v: sgn * Math.abs(mag) };
+  };
+  ol.querySelectorAll("[data-kind]").forEach((e) => e.onchange = () => {
+    const k = Number(e.dataset.kind), s = car.steps[k], kind = e.value;
+    const isF = kind === "fwd" || kind === "back";
+    const mag = (s.t === "F") === isF ? Math.abs(s.v) : (isF ? 1 : 90);
+    apply(k, kind, mag); renderSteps(); changed();
+  });
+  ol.querySelectorAll("[data-val]").forEach((e) => e.oninput = () => {
+    const k = Number(e.dataset.val), v = Number(e.value), ok = e.value.trim() !== "" && isFinite(v) && v >= 0;
+    e.classList.toggle("bad", !ok);
+    if (!ok) return;
+    const s = car.steps[k];
+    s.v = Math.sign(s.v || 1) * v; changed();
+    $("stepsum").textContent = `共 ${car.steps.length} 步 · 约 ${timeline(car, 0).slice(-1)[0].t.toFixed(0)} 秒`;
+  });
+  const move = (k, d) => { const j = k + d; if (j < 0 || j >= car.steps.length) return; [car.steps[k], car.steps[j]] = [car.steps[j], car.steps[k]]; renderSteps(); changed(); };
+  ol.querySelectorAll("[data-up]").forEach((b) => b.onclick = () => move(Number(b.dataset.up), -1));
+  ol.querySelectorAll("[data-dn]").forEach((b) => b.onclick = () => move(Number(b.dataset.dn), 1));
+  ol.querySelectorAll("[data-del]").forEach((b) => b.onclick = () => { car.steps.splice(Number(b.dataset.del), 1); renderSteps(); changed(); });
+  renderEditorLive();
+}
+function renderEditorLive() {
+  const car = cfg.cars[sel];
+  if (!car || !$("connline")) return;
+  const c = liveOf(car);
+  $("solo").disabled = !c || !c.connected || (live && live.running) || !!choreography || choreoPending;
+  if (!c) $("connline").innerHTML = "";
+  else if (!c.connected) $("connline").innerHTML = `<span class="err">${esc(c.conn_err || "正在连接…")}</span> · 可以点顶部"扫描小车"`;
+  else $("connline").innerHTML = [`电池 ${c.bat != null ? Number(c.bat).toFixed(2) + " V" : "—"}`,
+    `陀螺航向 ${c.gy != null ? Number(c.gy).toFixed(1) + "°" : "—"}`, `零偏 ${c.gb ?? "—"}°/s`,
+    c.fw ? `固件 ${esc(c.fw)}${c.onboard_straight ? "（板载直行）" : "（旧：电脑控制直行）"}` : ""].filter(Boolean).join(" · ");
+  const pre = $("log");
+  if (c && pre) {
+    const atBottom = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 4;
+    const txt = c.log.join("\n");
+    if (pre.textContent !== txt) { pre.textContent = txt; if (atBottom) pre.scrollTop = pre.scrollHeight; }
+  }
+  // highlight the running step
+  const ol = $("steps");
+  if (ol && c && c.run && (c.running || c.phase === "done") && JSON.stringify(c.run.steps) === JSON.stringify(car.steps.filter((s) => Math.abs(s.v) >= (s.t === "F" ? 0.01 : 0.5)))) {
+    ol.querySelectorAll("li[data-k]").forEach((li) => {
+      const k = Number(li.dataset.k);
+      li.classList.toggle("cur", c.running && k === c.run.step);
+      li.classList.toggle("done", c.run.step != null && k < c.run.step);
+    });
+  } else if (ol) ol.querySelectorAll("li").forEach((li) => li.classList.remove("cur", "done"));
+}
+
+// ------------------------------------------------------------------ launch --
+function isOnline(car) { const c = liveOf(car); return !!(c && c.connected); }
+async function launch(cars, useDelay) {
+  const withSteps = cars.filter((c) => c.steps.length);
+  if (!withSteps.length) { alert("选中的车都还没有设置步骤"); return; }
+  const off = withSteps.filter((c) => !isOnline(c));
+  const list = withSteps.filter((c) => isOnline(c));
+  if (!list.length) { alert("要出发的车都不在线（车开机了吗？可以点顶部\"扫描小车\"）"); return; }
+  const lines = list.map((c) => `${c.name}：${c.steps.length} 步，${c.speed} m/s，${useDelay ? `延时 ${c.delay} 秒` : "不延时"}`);
+  if (off.length && !confirm(`⚠ ${off.map((c) => c.name).join("、")} 勾选了但不在线，这次它不会动。\n\n如果它还摆在场地上，别的车会撞上它。\n\n点"确定"：我已经把它从场地上拿走，这次跳过它\n点"取消"：先不出发（给它开机，或点顶部"扫描小车"）`)) return;
+  const offTxt = off.length ? `\n\n不在线、这次不参加（已确认拿走）：${off.map((c) => c.name).join("、")}` : "";
+  if (!confirm(`出发前确认（${list.length} 辆）：\n· 车已摆在地图上的起点，车头方向一致\n· 周围有足够空地\n· 测零偏的 1 秒里别碰车\n\n` + lines.join("\n") + offTxt)) return;
+  preview = null;
+  const r = await api("/api/start", { sync: syncSteps, cars: list.map((c) => ({ id: c.id, steps: c.steps, speed: c.speed, delay: useDelay ? c.delay : 0, start: c.start })) });
+  if (r.error) alert("没能出发：" + r.error);
+  poll();
+}
+function stopAll() { api("/api/stop", {}); preview = null; choreoPreviewAt = null; }
+function refreshWarn() {
+  if (choreography) { $("warn").textContent = ""; return; }
+  const lines = [];
+  const multi = cfg.cars.filter((c) => c.enabled && c.steps.length).length >= 2;
+  if (multi) for (const useDelay of [false, true]) {
+    const r = planCheck(useDelay), name = useDelay ? "错开出发" : "同时出发";
+    if (r.worst.d < SAFE_GAP) lines.push(`<span class="bad">⚠ ${name}：约第 ${r.worst.t.toFixed(1)} 秒 ${esc(r.worst.a.name)} 和 ${esc(r.worst.b.name)} 只隔 ${r.worst.d.toFixed(2)} m，可能相撞</span>`);
+    else lines.push(`✓ ${name}：车与车最近 ${r.worst.d.toFixed(2)} m，全程约 ${r.end.toFixed(0)} 秒`);
+  }
+  $("warn").innerHTML = lines.join("　");
+}
+
+function buildChoreography(plan) {
+  const cars = Object.entries(plan.starts).map(([id, start]) => {
+    const i = cfg.cars.findIndex((c) => c.id === id);
+    return { id, start, i, name: cfg.cars[i]?.name || id, path: [[start.x, start.y]] };
+  });
+  const poses = Object.fromEntries(cars.map((car) => [car.id, { x: car.start.x, y: car.start.y, h: car.start.th }]));
+  let end = 0;
+  const stages = plan.stages.map((stage) => {
+    const kfs = Object.fromEntries(cars.map(({ id }) => [id, [{ ...poses[id], t: 0 }]]));
+    for (const job of stage.cars) {
+      kfs[job.id] = timeline(job, job.delay, true).map((p) => ({ t: p.t, ...worldPose(job, p) }));
+      poses[job.id] = kfs[job.id].at(-1);
+      const path = cars.find((car) => car.id === job.id).path;
+      nodes(job.steps).slice(1).forEach((p) => path.push(l2w(job.start, [p.x, p.y])));
+    }
+    const start = end;
+    end += Math.max(...Object.values(kfs).map((k) => k.at(-1).t));
+    return { start, end, kfs, name: stage.name };
+  });
+  return { plan, cars, stages, end, previousRunId: live?.choreography?.id };
+}
+
+function renderChoreographyStatus() {
+  const r = live?.choreography;
+  const busy = choreoPending || !!live?.running;
+  const offline = choreography?.cars.filter((car) => !isOnline(car)) || [];
+  $("choreo-import").disabled = busy;
+  $("choreo-preview").disabled = !choreography || busy;
+  $("choreo-start").disabled = !choreography || busy || !!offline.length;
+  $("choreo-close").hidden = !choreography;
+  $("choreo-close").disabled = busy;
+  let status = choreoMessage;
+  if (!status && r?.phase === "running") {
+    status = `${r.name} · ${r.stage ? `${r.stage}/${r.total} ${r.stage_name}` : "准备启动"}`;
+  }
+  if (!status && r && choreography?.plan.name === r.name && choreography.previousRunId !== r.id) {
+    status = { done: "编排执行完成", stopped: "编排已停止", error: `编排中止：${r.error}` }[r.phase];
+  }
+  if (!status && choreography) {
+    status = offline.length ? `等待上线：${offline.map((car) => car.name).join("、")}`
+      : `${choreography.cars.length} 辆车 · ${choreography.stages.length} 个阶段`;
+  }
+  $("choreo-msg").textContent = status || "";
+}
+
+function showChoreography(next) {
+  choreography = next;
+  preview = null;
+  choreoPreviewAt = null;
+  const panel = $("choreo-plan");
+  panel.innerHTML = next ? `<details><summary>${esc(next.plan.name)} · 阶段与车辆动作</summary>${next.plan.stages.map((stage, i) =>
+    `<b>${i + 1}. ${esc(stage.name)}</b><ul>${stage.cars.map((job) => {
+      const car = next.cars.find((c) => c.id === job.id);
+      return `<li>${esc(car.name)}：${job.steps.map(stepText).join(" → ")} · ${job.speed} m/s${job.delay ? ` · 延时 ${job.delay} 秒` : ""}</li>`;
+    }).join("")}</ul>`).join("")}</details>` : "";
+  const hint = $("maphint");
+  hint.dataset.normal ??= hint.textContent;
+  hint.textContent = next ? "编排地图 · 虚线为计划路线 · 滚轮缩放 · 拖动平移" : hint.dataset.normal;
+  fitView(); refreshWarn(); renderProgress(); renderEditorLive(); renderChoreographyStatus();
+}
+
+async function loadChoreography(file) {
+  choreoPending = true;
+  choreoMessage = "正在检查编排文件…";
+  renderChoreographyStatus();
+  try {
+    const data = JSON.parse((await file.text()).replace(/^\uFEFF/, ""));
+    const result = await api("/api/choreography/validate", data);
+    if (!result.plan) throw new Error(result.error || "控制台未返回编排，请重启 fleet_ui");
+    choreoMessage = "";
+    showChoreography(buildChoreography(result.plan));
+  } catch (e) { choreoMessage = `导入失败：${e.message}`; }
+  finally { choreoPending = false; renderProgress(); renderEditorLive(); renderChoreographyStatus(); }
+}
+
+async function launchChoreography() {
+  if (!choreography || $("choreo-start").disabled) return;
+  const { plan, cars, stages } = choreography;
+  if (!confirm(`执行「${plan.name}」？\n${cars.length} 辆车，${stages.length} 个阶段。请确认车辆已按地图摆位且活动区域空旷。`)) return;
+  choreoPreviewAt = null;
+  choreoPending = true;
+  choreoMessage = "正在启动…";
+  renderChoreographyStatus();
+  try {
+    const result = await api("/api/choreography/start", plan);
+    if (result.error) throw new Error(result.error);
+    choreoMessage = "";
+  } catch (e) { choreoMessage = `启动失败：${e.message}`; }
+  finally { await poll(); choreoPending = false; renderProgress(); renderEditorLive(); renderChoreographyStatus(); }
+}
+
+// --------------------------------------------------------------------- map --
+const cv = $("map"), ctx = cv.getContext("2d");
+function resize() {
+  const r = cv.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+function toPx(x, y) { const r = cv.getBoundingClientRect(); return [r.width / 2 + (x - view.cx) * view.scale, r.height / 2 - (y - view.cy) * view.scale]; }
+function toW(px, py) { const r = cv.getBoundingClientRect(); return [view.cx + (px - r.width / 2) / view.scale, view.cy - (py - r.height / 2) / view.scale]; }
+function handleOf(car) { return l2w(car.start, [0.32, 0]); }
+function carShape(x, y, h, col, mode, label) {
+  const [px, py] = toPx(x, y), L = CAR_L * view.scale, W = CAR_W * view.scale;
+  ctx.save(); ctx.translate(px, py); ctx.rotate(-h * deg);
+  if (mode === "start") {
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+    ctx.fillStyle = css("--surface"); ctx.globalAlpha = 0.9;
+    ctx.fillRect(-L / 2, -W / 2, L, W); ctx.globalAlpha = 1; ctx.strokeRect(-L / 2, -W / 2, L, W);
+    ctx.setLineDash([]);
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(L / 2 - 2, 0); ctx.lineTo(L / 2 - Math.min(12, L * 0.4), -W / 3.2); ctx.lineTo(L / 2 - Math.min(12, L * 0.4), W / 3.2); ctx.fill();
+  } else {
+    ctx.globalAlpha = mode === "ghost" ? 0.55 : 1;
+    ctx.fillStyle = col; ctx.strokeStyle = css("--surface"); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(-L / 2, -W / 2, L, W, 3); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.moveTo(L / 2 - 2, 0); ctx.lineTo(L / 2 - Math.min(12, L * 0.4), -W / 3.2); ctx.lineTo(L / 2 - Math.min(12, L * 0.4), W / 3.2); ctx.fill();
+  }
+  ctx.restore();
+  if (label) {
+    ctx.font = "600 12px system-ui, sans-serif";
+    const tw = ctx.measureText(label).width, bx = px + L / 2 + 6, by = py - W / 2 - 18;
+    ctx.fillStyle = css("--surface"); ctx.globalAlpha = 0.85; ctx.fillRect(bx - 3, by, tw + 6, 17); ctx.globalAlpha = 1;
+    ctx.fillStyle = css("--text"); ctx.fillText(label, bx, by + 13);
+  }
+}
+function drawChoreography() {
+  const { cars, stages, end } = choreography;
+  const elapsed = choreoPreviewAt === null ? 0 : Math.min(end, (performance.now() - choreoPreviewAt) / 1000);
+  const stage = stages.find((s) => elapsed < s.end) || stages.at(-1);
+  const running = live?.choreography;
+  const active = running?.name === choreography.plan.name && running.id !== choreography.previousRunId
+    && running.stage && ["running", "done"].includes(running.phase) ? stages[running.stage - 1] : null;
+  for (const car of cars) {
+    const col = carColor(car.i);
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.setLineDash([6, 5]); ctx.beginPath();
+    car.path.forEach(([x, y], i) => { const p = toPx(x, y); i ? ctx.lineTo(...p) : ctx.moveTo(...p); });
+    ctx.stroke(); ctx.setLineDash([]);
+    let p = poseAt(stage.kfs[car.id], elapsed - stage.start);
+    if (choreoPreviewAt === null && active) {
+      p = poseAt(active.kfs[car.id], 0);
+      const current = liveOf(car), run = current?.run;
+      if (run?.est && ["calib", "ready", "waiting", "sync", "turn", "straight", "done"].includes(current.phase)
+          && choreography.plan.stages[running.stage - 1].cars.some((job) => job.id === car.id)) {
+        p = worldPose({ start: run.start }, { x: run.est[0], y: run.est[1], h: run.est[2] });
+      }
+    }
+    const mode = choreoPreviewAt !== null ? "ghost" : active ? "car" : "start";
+    carShape(p.x, p.y, p.h, col, mode, car.name);
+  }
+  if (choreoPreviewAt !== null) {
+    ctx.font = "600 13px system-ui, sans-serif"; ctx.fillStyle = css("--text");
+    const label = elapsed >= end ? "预览完成" : `预览 · ${stages.indexOf(stage) + 1}/${stages.length} ${stage.name}`;
+    ctx.fillText(`${label} · ${elapsed.toFixed(1)} / ${end.toFixed(1)} 秒`, 12, cv.getBoundingClientRect().height - 30);
+  }
+}
+function draw() {
+  const r = cv.getBoundingClientRect();
+  ctx.clearRect(0, 0, r.width, r.height);
+  ctx.fillStyle = css("--surface"); ctx.fillRect(0, 0, r.width, r.height);
+  // grid
+  const [x0, y1] = toW(0, 0), [x1, y0] = toW(r.width, r.height);
+  const gstep = view.scale < 60 ? 1 : 0.5;
+  ctx.font = "11px system-ui, sans-serif";
+  for (let gx = Math.floor(x0 / gstep) * gstep; gx <= x1; gx += gstep) {
+    const major = Math.abs(gx - Math.round(gx)) < 1e-6, [px] = toPx(gx, 0);
+    ctx.strokeStyle = css(major ? "--grid-major" : "--grid"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(Math.round(px) + .5, 0); ctx.lineTo(Math.round(px) + .5, r.height); ctx.stroke();
+    if (major) { ctx.fillStyle = css("--muted"); ctx.fillText(`${Math.round(gx)} m`, px + 3, 14); }
+  }
+  for (let gy = Math.floor(y0 / gstep) * gstep; gy <= y1; gy += gstep) {
+    const major = Math.abs(gy - Math.round(gy)) < 1e-6, [, py] = toPx(0, gy);
+    ctx.strokeStyle = css(major ? "--grid-major" : "--grid"); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, Math.round(py) + .5); ctx.lineTo(r.width, Math.round(py) + .5); ctx.stroke();
+    if (major && Math.abs(gy) > 1e-6) { ctx.fillStyle = css("--muted"); ctx.fillText(`${Math.round(gy)} m`, 4, py - 3); }
+  }
+  const running = live && live.running;
+  if (choreography) drawChoreography();
+  else cfg.cars.forEach((car, i) => {
+    const col = carColor(i), c = liveOf(car);
+    const showRun = c && c.run && c.run.est && c.run.step != null && (c.running || ["done", "stopped", "error"].includes(c.phase));
+    // planned path (the launched plan while it runs, else the edited plan)
+    const steps = showRun ? c.run.steps : car.steps, start = showRun ? c.run.start : car.start;
+    const nd = nodes(steps).map((n) => l2w(start, [n.x, n.y]));
+    ctx.strokeStyle = col; ctx.lineWidth = i === sel && !running ? 2 : 1.5; ctx.globalAlpha = car.enabled || showRun ? 0.75 : 0.3;
+    ctx.setLineDash([6, 5]); ctx.beginPath();
+    nd.forEach((p, k) => { const [px, py] = toPx(p[0], p[1]); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+    ctx.stroke(); ctx.setLineDash([]);
+    const seen = [];
+    nd.slice(1).forEach((p) => {
+      if (seen.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.01)) return;
+      seen.push(p);
+      const [px, py] = toPx(p[0], p[1]); ctx.fillStyle = col; ctx.beginPath(); ctx.arc(px, py, 3, 0, 2 * Math.PI); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    // start marker + rotate handle (editable when idle)
+    carShape(car.start.x, car.start.y, car.start.th, col, "start", showRun ? "" : `${car.name} 起点`);
+    if (!running && i === sel) {
+      const [hx, hy] = handleOf(car), [px, py] = toPx(hx, hy);
+      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([2, 3]);
+      const [sx, sy] = toPx(car.start.x, car.start.y);
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(px, py); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = css("--surface"); ctx.strokeStyle = col; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+    }
+    // actual (estimated) trail + current pose
+    if (showRun) {
+      const t = (c.run.trail || []).map((q) => l2w(c.run.start, q));
+      t.push(l2w(c.run.start, c.run.est));
+      if (t.length > 1) {
+        ctx.strokeStyle = col; ctx.lineWidth = 4; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.beginPath();
+        t.forEach((p, k) => { const [px, py] = toPx(p[0], p[1]); k ? ctx.lineTo(px, py) : ctx.moveTo(px, py); });
+        ctx.stroke();
+      }
+      const p = l2w(c.run.start, c.run.est);
+      carShape(p[0], p[1], c.run.start.th + c.run.est[2], col, "car", car.name);
+    }
+  });
+  if (preview) {
+    const t = (performance.now() - preview.t0) / 1000;
+    preview.res.cars.forEach((car, k) => {
+      const i = cfg.cars.indexOf(car), wp = worldPose(car, poseAt(preview.res.kfs[k], t));
+      carShape(wp.x, wp.y, wp.h, carColor(i), "ghost", `${car.name} 预演`);
+    });
+    ctx.font = "600 13px system-ui, sans-serif"; ctx.fillStyle = css("--text");
+    ctx.fillText(`预演 ${Math.min(t, preview.res.end).toFixed(1)} / ${preview.res.end.toFixed(1)} 秒（${preview.useDelay ? "错开" : "同时"}出发）`, 12, r.height - 30);
+    if (t > preview.res.end + 1.5) preview = null;
+  }
+  requestAnimationFrame(draw);
+}
+function fitView() {
+  const pts = choreography ? choreography.cars.flatMap((car) => car.path)
+    : cfg.cars.flatMap((car) => nodes(car.steps).map((n) => l2w(car.start, [n.x, n.y])));
+  if (!pts.length) return;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]), r = cv.getBoundingClientRect();
+  const minx = Math.min(...xs) - 0.5, maxx = Math.max(...xs) + 0.5, miny = Math.min(...ys) - 0.5, maxy = Math.max(...ys) + 0.5;
+  view.cx = (minx + maxx) / 2; view.cy = (miny + maxy) / 2;
+  view.scale = Math.max(25, Math.min(400, Math.min(r.width / (maxx - minx), r.height / (maxy - miny))));
+}
+
+// map interaction: drag start box = move start, drag handle = rotate, drag empty = pan
+let drag = null;
+function hit(wx, wy) {
+  if (choreography || live?.running) return null;
+  const order = [sel, ...cfg.cars.map((_, i) => i).filter((i) => i !== sel)];
+  const car = cfg.cars[sel];
+  if (car) { const [hx, hy] = handleOf(car); if (Math.hypot(wx - hx, wy - hy) < 9 / view.scale) return { kind: "rot", i: sel }; }
+  for (const i of order) { const c = cfg.cars[i]; if (Math.hypot(wx - c.start.x, wy - c.start.y) < Math.max(CAR_L / 2, 10 / view.scale)) return { kind: "move", i }; }
+  return null;
+}
+cv.addEventListener("pointerdown", (e) => {
+  if (e.button !== 0) return;
+  const rc = cv.getBoundingClientRect(), [wx, wy] = toW(e.clientX - rc.left, e.clientY - rc.top);
+  const h = hit(wx, wy);
+  drag = h ? { ...h, ox: wx - cfg.cars[h.i].start.x, oy: wy - cfg.cars[h.i].start.y } : { kind: "pan", x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy };
+  if (h && h.i !== sel) { sel = h.i; renderTabs(); renderEditor(); renderFleetbar(); }
+  cv.setPointerCapture(e.pointerId); cv.classList.add("dragging");
+});
+cv.addEventListener("pointermove", (e) => {
+  const rc = cv.getBoundingClientRect(), mx = e.clientX - rc.left, my = e.clientY - rc.top, [wx, wy] = toW(mx, my);
+  $("coord").textContent = `(${wx.toFixed(2)}, ${wy.toFixed(2)}) m`;
+  if (drag) {
+    const car = cfg.cars[drag.i];
+    if (drag.kind === "pan") { view.cx = drag.cx - (e.clientX - drag.x) / view.scale; view.cy = drag.cy + (e.clientY - drag.y) / view.scale; }
+    else if (drag.kind === "move") { const q = e.shiftKey ? 0.01 : 0.05; car.start.x = Math.round((wx - drag.ox) / q) * q; car.start.y = Math.round((wy - drag.oy) / q) * q; }
+    else if (drag.kind === "rot") { const a = Math.atan2(wy - car.start.y, wx - car.start.x) / deg; car.start.th = e.shiftKey ? Math.round(a) : Math.round(a / 15) * 15; }
+    $("tip").style.display = "none";
+    return;
+  }
+  // hover tooltip
+  let tip = "";
+  if (!choreography) cfg.cars.forEach((car, i) => {
+    const c = liveOf(car);
+    let p = [car.start.x, car.start.y];
+    if (c && c.run && c.run.est && c.run.step != null) p = l2w(c.run.start, c.run.est);
+    if (!tip && Math.hypot(wx - p[0], wy - p[1]) < Math.max(0.15, 14 / view.scale)) {
+      const [txt] = chipOf(c), pr = progressOf(car, c);
+      tip = `<b>${esc(car.name)}</b> · ${esc(txt)}<br>${esc(pr.what)}${c && c.bat != null ? `<br>电池 ${Number(c.bat).toFixed(2)} V · 航向 ${c.gy != null ? Number(c.gy).toFixed(1) + "°" : "—"}` : ""}`;
+    }
+  });
+  const t = $("tip");
+  if (tip) { t.innerHTML = tip; t.style.display = "block"; t.style.left = mx + 14 + "px"; t.style.top = my + 10 + "px"; }
+  else t.style.display = "none";
+  cv.style.cursor = hit(wx, wy) ? "move" : "";
+});
+cv.addEventListener("pointerup", () => {
+  if (drag && drag.kind !== "pan") { changed(); if (drag.i === sel) renderEditor(); }
+  drag = null; cv.classList.remove("dragging");
+});
+cv.addEventListener("pointerleave", () => { $("tip").style.display = "none"; });
+cv.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const rc = cv.getBoundingClientRect(), b = toW(e.clientX - rc.left, e.clientY - rc.top);
+  view.scale = Math.max(25, Math.min(500, view.scale * (e.deltaY < 0 ? 1.15 : 1 / 1.15)));
+  const a = toW(e.clientX - rc.left, e.clientY - rc.top);
+  view.cx += b[0] - a[0]; view.cy += b[1] - a[1];
+}, { passive: false });
+
+// ------------------------------------------------------------------- wiring --
+$("estop").onclick = stopAll;
+$("fit").onclick = fitView;
+$("go-sync").onclick = () => launch(cfg.cars.filter((c) => c.enabled), false);
+$("go-delay").onclick = () => launch(cfg.cars.filter((c) => c.enabled), true);
+$("sync-steps").checked = syncSteps;
+$("sync-steps").onchange = (e) => { syncSteps = e.target.checked; localStorage.setItem("wr_sync", syncSteps ? "1" : "0"); refreshWarn(); renderEditor(); };
+$("preview").onclick = () => { const useDelay = cfg.cars.some((c) => c.enabled && c.delay > 0); preview = { t0: performance.now(), res: planCheck(useDelay), useDelay }; };
+$("choreo-import").onclick = () => $("choreo-file").click();
+$("choreo-file").onchange = (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (file) loadChoreography(file);
+};
+$("choreo-preview").onclick = () => { choreoPreviewAt = performance.now(); };
+$("choreo-start").onclick = launchChoreography;
+$("choreo-close").onclick = () => { choreoMessage = ""; showChoreography(null); };
+$("scan").onclick = async () => {
+  $("scan").disabled = true; $("scanmsg").textContent = "扫描中（约 3 秒）…";
+  try {
+    const r = await api("/api/scan", {});
+    for (const ch of r.changes) { const c = cfg.cars.find((x) => x.id === ch.id); if (c) c.ip = ch.ip; }
+    if (r.changes.length) { changed(); renderEditor(); }
+    const list = r.found.map((f) => `${f.car || "未登记的车"} ${f.ip}`).join("，") || "一辆也没找到（电脑热点开着吗？车开机了吗？）";
+    const ch = r.changes.map((c) => `${c.name} ${c.old}→${c.ip}`).join("，");
+    $("scanmsg").textContent = `找到：${list}` + (ch ? `；已更新 IP：${ch}` : "");
+  } catch (_) { $("scanmsg").textContent = "扫描失败"; }
+  $("scan").disabled = false;
+};
+document.addEventListener("keydown", (e) => {
+  const tag = (e.target.tagName || "").toLowerCase();
+  if (e.key === "Escape" || (e.key === " " && !["input", "select", "textarea", "button"].includes(tag))) { e.preventDefault(); stopAll(); }
+});
+window.addEventListener("resize", resize);
+
+async function init() {
+  resize();
+  try { plans = await api("/api/plans"); } catch (_) { plans = []; }
+  cfg = await api("/api/config");
+  for (const c of cfg.cars) {
+    c.start = c.start || { x: 0, y: 0, th: 0 };
+    if (!Array.isArray(c.steps)) c.steps = Array.isArray(c.points) ? pointsToSteps(c.points) : [];
+    delete c.points;
+    c.speed = c.speed ?? 0.25; c.delay = c.delay ?? 0; c.enabled = c.enabled ?? true;
+  }
+  renderFleetbar(); renderTabs(); renderEditor(); fitView(); refreshWarn();
+  requestAnimationFrame(draw);
+  poll(); setInterval(poll, 300);
+}
+init();
+</script>
+</body>
+</html>

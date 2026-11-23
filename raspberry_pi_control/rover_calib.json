@@ -1,0 +1,18 @@
+{
+  "speed_gain": 1.1111111111111112,
+  "turn_gain": 45.0,
+  "yaw_sign": 1,
+  "wheel_track": 0.172,
+  "min_pwm": 0.08,
+  "turn_min_pwm": 0.21,
+  "kp_turn": 1.2,
+  "kd_turn": 1.2,
+  "max_pwm": 0.5,
+  "kp_heading": 3.0,
+  "tol_heading": 4.0,
+  "settle_time": 0.3,
+  "stall_watchdog": 4.0,
+  "ramp_time": 0.6,
+  "resync_settle": 1.2,
+  "gyro_scale": 1.11
+}

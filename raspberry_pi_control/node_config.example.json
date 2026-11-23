@@ -1,0 +1,9 @@
+{
+  "node_id": "rover01",
+  "port": 8765,
+  "serial_port": null,
+  "expected_mac": null,
+  "tf_port": "/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0",
+  "calibration": "/home/rover/rover_control/rover_calib.json",
+  "state_file": "/home/rover/rover_control/state/node_state.json"
+}
